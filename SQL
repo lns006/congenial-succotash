@@ -1,0 +1,75 @@
+import sqlite3
+
+class StudentDB:
+    def __init__(self, db_name):
+        self.conn = sqlite3.connect(db_name)
+        self.cursor = self.conn.cursor()
+        self.create_tables()
+
+    def create_tables(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Courses (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                time_start TEXT,
+                time_end TEXT
+            )
+        """)
+
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Students (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                surname TEXT,
+                age INTEGER,
+                city TEXT
+            )
+        """)
+
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Student_courses (
+                student_id INTEGER,
+                course_id INTEGER,
+                FOREIGN KEY (student_id) REFERENCES Students(id),
+                FOREIGN KEY (course_id) REFERENCES Courses(id)
+            )
+        """)
+
+    def insert_course(self, id, name, time_start, time_end):
+        self.cursor.execute("""
+            INSERT INTO Courses (id, name, time_start, time_end) VALUES (?, ?, ?, ?)
+        """, (id, name, time_start, time_end))
+        self.conn.commit()
+
+    def insert_student(self, id, name, surname, age, city):
+        self.cursor.execute("""
+            INSERT INTO Students (id, name, surname, age, city) VALUES (?, ?, ?, ?, ?)
+        """, (id, name, surname, age, city))
+        self.conn.commit()
+
+    def enroll_student(self, student_id, course_id):
+        self.cursor.execute("""
+            INSERT INTO Student_courses (student_id, course_id) VALUES (?, ?)
+        """, (student_id, course_id))
+        self.conn.commit()
+
+    def execute_query(self, query):
+        self.cursor.execute(query)
+        result = self.cursor.fetchall()
+        return result
+
+# Test
+db = StudentDB('students.db')
+
+# Test
+db.insert_course(1, 'python', '21.07.21', '21.08.21')
+db.insert_course(2, 'java', '13.07.21', '16.08.21')
+db.insert_student(1, 'Max', 'Brooks', 24, 'Spb')
+db.insert_student(2, 'John', 'Stones', 15, 'Spb')
+db.insert_student(3, 'Andy', 'Wings', 45, 'Manchester')
+db.enroll_student(1, 1)
+db.enroll_student(2, 2)
+
+query = "SELECT name, surname FROM Students"
+result = db.execute_query(query)
+print(result)

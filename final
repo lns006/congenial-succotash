@@ -1,0 +1,92 @@
+from sqlalchemy import create_engine, Column, Integer, String, Sequence
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import pytest
+
+# Определение базового класса для использования в ORM
+Base = declarative_base()
+
+# Определение модели данных для таблицы образца
+class SampleEntity(Base):
+    __tablename__ = 'sample_table'
+    id = Column(Integer, Sequence('sample_id_seq'), primary_key=True)
+    name = Column(String(50))
+
+# Определение модели данных для целевой таблицы
+class TargetEntity(Base):
+    __tablename__ = 'target_table'
+    id = Column(Integer, Sequence('target_id_seq'), primary_key=True)
+    name = Column(String(50))
+
+# Класс для обновления данных в целевой таблице по образцу
+class DatabaseUpdater:
+    def __init__(self, sample_session, target_session):
+        self.sample_session = sample_session
+        self.target_session = target_session
+
+    def update_target_database(self):
+        # Получаем все записи из таблицы образца
+        sample_entities = self.sample_session.query(SampleEntity).all()
+        for sample_entity in sample_entities:
+            # Ищем соответствующую запись в целевой таблице
+            target_entity = self.target_session.query(TargetEntity).filter_by(id=sample_entity.id).first()
+            if target_entity:
+                # Обновляем имя в целевой таблице по образцу
+                target_entity.name = sample_entity.name
+
+    def commit_changes(self):
+        # Фиксируем изменения в целевой таблице
+        self.target_session.commit()
+
+# Функция для создания образца данных в таблице образца
+def create_sample_data(session):
+    session.add_all([
+        SampleEntity(name='SampleName1'),
+        SampleEntity(name='SampleName2'),
+        SampleEntity(name='SampleName3')
+    ])
+    session.commit()
+
+# Фикстура для настройки базы данных перед каждым тестом
+@pytest.fixture
+def setup_database():
+    # Создаем движки баз данных в памяти
+    sample_engine = create_engine('sqlite:///:memory:')
+    target_engine = create_engine('sqlite:///:memory:')
+
+    # Создаем таблицы
+    Base.metadata.create_all(sample_engine)
+    Base.metadata.create_all(target_engine)
+
+    # Создаем сессии для работы с базами данных
+    SampleSession = sessionmaker(bind=sample_engine)
+    TargetSession = sessionmaker(bind=target_engine)
+
+    # Создаем сессию образца и добавляем в нее данные
+    sample_session = SampleSession()
+    create_sample_data(sample_session)
+
+    # Создаем сессию целевой таблицы и добавляем в нее тестовые данные
+    target_session = TargetSession()
+    target_session.add_all([
+        TargetEntity(name='TargetName1'),
+        TargetEntity(name='TargetName2'),
+        TargetEntity(name='TargetName3')
+    ])
+    target_session.commit()
+
+    # Возвращаем объект DatabaseUpdater в качестве фикстуры для тестов
+    yield DatabaseUpdater(sample_session, target_session)
+
+# Тест для проверки обновления целевой таблицы по образцу
+def test_update_target_database(setup_database):
+    updater = setup_database  # Получаем объект DatabaseUpdater из фикстуры
+    updater.update_target_database()  # Выполняем обновление целевой таблицы
+    updater.commit_changes()  # Фиксируем изменения
+
+    # Проверяем, что данные в целевой таблице соответствуют образцу
+    target_entities = updater.target_session.query(TargetEntity).all()
+    expected_names = ['SampleName1', 'SampleName2', 'SampleName3']
+
+    for i, entity in enumerate(target_entities):
+        assert entity.name == expected_names[i]
